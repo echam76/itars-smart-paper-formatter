@@ -10,7 +10,7 @@ st.title("ITARS Smart Paper Formatter")
 st.caption("International TVET Academic and Research Symposium (ITARS 6.0)")
 st.info(
     "Upload your Microsoft Word manuscript (.docx) to apply basic formatting based on "
-    "the ITARS 5.0 paper template, retained for ITARS 6.0, and generate a compliance report."
+    "the official ITARS 6.0 reference template, and generate a compliance report."
 )
 st.warning(
     "**Prototype version:** Automated formatting does not guarantee full compliance. "
@@ -25,7 +25,7 @@ with st.expander("Privacy and processing limitations"):
         "organiser has approved the hosting and privacy arrangements."
     )
 
-TEMPLATE = Path(__file__).with_name("ITARS_Original_Template.docx")
+TEMPLATE = Path(__file__).with_name("ITARS_6_Reference_Template.docx")
 st.download_button(
     "Download the official reference template",
     data=TEMPLATE.read_bytes(),
