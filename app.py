@@ -64,16 +64,22 @@ if "formatted" in st.session_state:
     )
     st.subheader("Formatting and Compliance Report")
     report = st.session_state["report"]
-    for item in report["checks"]:
-        status = item["status"]
-        st.write(("✅" if status == "Pass" else "⚠️") + f" **{item['check']}** — {status}")
-        st.caption(item["details"])
+    # Accept both the earlier Malay report schema and the English report schema.
+    normalized_checks = []
+    for item in report.get("checks", []):
+        raw_status = item.get("status", item.get("Status", "Review required"))
+        status = "Pass" if str(raw_status).casefold() in ("pass", "lulus") else "Review required"
+        name = item.get("check", item.get("Semakan", "Formatting check"))
+        details = item.get("details", item.get("Butiran", "No details provided"))
+        normalized_checks.append({"status": status, "check": name, "details": details})
+        st.write(("✅" if status == "Pass" else "⚠️") + f" **{name}** — {status}")
+        st.caption(details)
     lines = [
         "ITARS 6.0 — FORMATTING AND COMPLIANCE REPORT",
         "Note: Automated checks are limited and do not indicate acceptance of the paper.",
         "",
     ]
-    lines.extend(f"{item['status']} | {item['check']} | {item['details']}" for item in report["checks"])
+    lines.extend(f"{item['status']} | {item['check']} | {item['details']}" for item in normalized_checks)
     st.download_button(
         "⬇️ Download Compliance Report (TXT)",
         data="\n".join(lines).encode("utf-8"),
