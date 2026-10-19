@@ -40,7 +40,7 @@ def classify(paragraphs):
         elif FIGURE_RE.match(txt):kinds[i]='caption'
     return kinds,start,end
 
-def set_font(p, size=11, bold=None, italic=None):
+def set_font(p, size=12, bold=None, italic=None):
     for run in p.runs:
         # Preserve non-text runs and existing emphasis in body
         run.font.name='Times New Roman'
@@ -55,10 +55,10 @@ def replace_text_runs(p, old, new):
 
 def format_document(raw, label='ITARS 6.0', year='2027'):
     data=io.BytesIO(raw)
-    if not zipfile.is_zipfile(data):raise ValueError('Fail bukan DOCX yang sah.')
-    if len(raw)>20*1024*1024:raise ValueError('Fail terlalu besar (maksimum 20 MB).')
+    if not zipfile.is_zipfile(data):raise ValueError('The uploaded file is not a valid DOCX document.')
+    if len(raw)>20*1024*1024:raise ValueError('The file is too large (maximum 20 MB).')
     doc=Document(io.BytesIO(raw))
-    normal=doc.styles['Normal'];normal.font.name='Times New Roman';normal.font.size=Pt(11)
+    normal=doc.styles['Normal'];normal.font.name='Times New Roman';normal.font.size=Pt(12)
     for sec in doc.sections:
         sec.page_width=Cm(21);sec.page_height=Cm(29.7)
         sec.top_margin=sec.bottom_margin=sec.left_margin=sec.right_margin=Cm(2.54)
@@ -78,13 +78,15 @@ def format_document(raw, label='ITARS 6.0', year='2027'):
             p.alignment=WD_ALIGN_PARAGRAPH.CENTER
             set_font(p,14 if kind=='title' else 11,bold=True if kind in ('title','abstract_heading') else None)
         elif kind=='heading':
-            p.alignment=WD_ALIGN_PARAGRAPH.LEFT;set_font(p,11,bold=True)
+            p.alignment=WD_ALIGN_PARAGRAPH.LEFT;set_font(p,12,bold=True)
             p.paragraph_format.keep_with_next=True
         elif kind=='subheading':
-            p.alignment=WD_ALIGN_PARAGRAPH.LEFT;set_font(p,11,bold=True)
+            p.alignment=WD_ALIGN_PARAGRAPH.LEFT;set_font(p,12,bold=True)
             p.paragraph_format.keep_with_next=True
         elif kind=='caption':
-            p.alignment=WD_ALIGN_PARAGRAPH.CENTER;set_font(p,10)
+            p.alignment=WD_ALIGN_PARAGRAPH.CENTER;set_font(p,12)
+        elif kind=='abstract_body':
+            p.alignment=WD_ALIGN_PARAGRAPH.JUSTIFY;set_font(p,11)
         elif kind=='keywords':
             p.alignment=WD_ALIGN_PARAGRAPH.LEFT;set_font(p,11)
             # Italicize keyword values without rewriting runs or removing embedded elements.
@@ -92,13 +94,13 @@ def format_document(raw, label='ITARS 6.0', year='2027'):
                 if 'Keywords:' not in r.text:r.italic=True
         else:
             p.alignment=WD_ALIGN_PARAGRAPH.JUSTIFY
-            set_font(p,11)
+            set_font(p,12)
         p.paragraph_format.space_after=Pt(0)
     # Original tables stay editable; format text only (do not rebuild cells).
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                for p in cell.paragraphs:set_font(p,10)
+                for p in cell.paragraphs:set_font(p,12)
     buf=io.BytesIO();doc.save(buf)
     return buf.getvalue(),analyze(doc,kinds,abstract_index,kw_index)
 
@@ -116,12 +118,19 @@ def analyze(doc,kinds=None,abstract_index=None,kw_index=None):
     captions=sum(bool(re.match(r'^Table\s*\d+',t,re.I)) for t in text)
     # Inline shapes count plus floating drawings; not treated as verified image quality.
     reports=[]
-    def check(name,good,details):reports.append({'Semakan':name,'Status':'Lulus' if good else 'Perlu semakan','Butiran':details})
-    check('Abstrak 250–300 perkataan',250<=words<=300,f'{words} perkataan' if abstract_index is not None else 'Tiada tajuk ABSTRACT dikesan')
-    check('Sekurang-kurangnya 3 keywords',len(keywords)>=3,f'{len(keywords)} keywords')
-    check('Seksyen teras',len(found)==len(SECTIONS),f"Dikesan: {', '.join(found) or 'tiada'}")
-    check('Jadual boleh diedit', captions<=len(doc.tables),f'{captions} kapsyen jadual; {len(doc.tables)} jadual Word (semak secara visual)')
-    check('Semakan APA 7',False,'Perlu semakan manusia; sistem tidak mengesahkan DOI, sumber atau setiap sitasi')
-    check('Rajah dan persamaan',False,f'{figures} kapsyen rajah; semak kedudukan, imej dan persamaan dalam Word')
-    check('Tajuk dan abstrak tanpa simbol khas',False,'Perlu penilaian penulis; tanda baca biasa tidak diubah')
+    def check(name,good,details):
+        reports.append({'check':name,'status':'Pass' if good else 'Review required','details':details})
+    check('Abstract length: 250–300 words',250<=words<=300,
+          f'{words} words' if abstract_index is not None else 'ABSTRACT heading not detected')
+    check('At least three keywords',len(keywords)>=3,f'{len(keywords)} keywords detected')
+    check('Required core sections',len(found)==len(SECTIONS),
+          f"Detected: {', '.join(found) if found else 'none'}")
+    check('Editable tables',captions<=len(doc.tables),
+          f'{captions} table captions; {len(doc.tables)} editable Word tables (visual review needed)')
+    check('APA 7th edition references',False,
+          'Manual verification required: citation details, DOIs and source validity are not checked')
+    check('Figures and equations',False,
+          f'{figures} figure captions detected; inspect image placement and equations in Word')
+    check('Special characters in title and abstract',False,
+          'Author review required; punctuation and symbols are not removed automatically')
     return {'checks':reports,'abstract_words':words,'keyword_count':len(keywords),'tables':len(doc.tables),'figure_captions':figures,'sections':heads}
