@@ -1,32 +1,88 @@
+"""English-language interface for ITARS 6.0 Smart Paper Formatter."""
+from pathlib import Path
+
 import streamlit as st
+
 from formatter import format_document
 
-st.set_page_config(page_title='ITARS Smart Paper Formatter',page_icon='📄',layout='centered')
-st.title('ITARS Smart Paper Formatter')
-st.caption('International TVET Academic and Research Symposium (ITARS 6.0)')
-st.info('Muat naik manuskrip Microsoft Word (.docx) untuk pemformatan asas dan laporan pematuhan berdasarkan format ITARS 5.0 yang digunakan semula untuk ITARS 6.0.')
-st.warning('Versi percubaan: Pemformatan automatik tidak menjamin pematuhan penuh. Semak abstrak, rajah, jadual, persamaan dan rujukan APA 7 sebelum menghantar.')
-with st.expander('Privasi dan had pemprosesan'):
-    st.write('Fail diproses dalam sesi aplikasi untuk menghasilkan output dan tidak disimpan sengaja ke pangkalan data oleh kod ini. Perkhidmatan hosting mungkin mempunyai log atau dasar penyimpanan tersendiri. Elakkan memuat naik manuskrip sulit sehingga penganjur meluluskan hosting dan dasar privasi.')
-st.download_button('Muat turun template asal (rujukan format)',data=open('ITARS_Original_Template.docx','rb').read(),file_name='ITARS_6_Reference_Template.docx',mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-uploaded=st.file_uploader('Pilih manuskrip Word',type=['docx'],help='Maksimum 20 MB')
-if uploaded:
-    if st.button('Format Manuskrip',type='primary'):
-        try:
-            out,report=format_document(uploaded.getvalue(),label='ITARS 6.0',year='2027')
-            st.session_state['formatted']=out
-            st.session_state['report']=report
-            st.success('Pemformatan asas selesai. Sila periksa laporan sebelum menghantar manuskrip.')
-        except Exception as e:st.error(f'Gagal memproses dokumen: {e}')
-if 'formatted' in st.session_state:
-    st.download_button('⬇️ Muat turun Word yang diformat',st.session_state['formatted'],file_name='ITARS6_Formatted_Paper.docx',mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-    st.subheader('Laporan pematuhan')
-    report=st.session_state['report']
-    for c in report['checks']:
-        st.write(('✅' if c['Status']=='Lulus' else '⚠️')+f" **{c['Semakan']}** — {c['Status']}")
-        st.caption(c['Butiran'])
-    lines=['ITARS 6.0 — LAPORAN PEMATUHAN','Nota: Pemeriksaan automatik terhad; bukan pengesahan penerimaan kertas.','']
-    lines += [f"{c['Status']} | {c['Semakan']} | {c['Butiran']}" for c in report['checks']]
-    st.download_button('⬇️ Muat turun laporan TXT','\n'.join(lines).encode(),file_name='ITARS6_Compliance_Report.txt',mime='text/plain')
+st.set_page_config(page_title="ITARS Smart Paper Formatter | ITARS 6.0", page_icon="📄", layout="centered")
+st.title("ITARS Smart Paper Formatter")
+st.caption("International TVET Academic and Research Symposium (ITARS 6.0)")
+st.info(
+    "Upload your Microsoft Word manuscript (.docx) to apply basic formatting based on "
+    "the ITARS 5.0 paper template, retained for ITARS 6.0, and generate a compliance report."
+)
+st.warning(
+    "**Prototype version:** Automated formatting does not guarantee full compliance. "
+    "Review the abstract, figures, tables, equations, and APA 7th edition references before submission."
+)
+
+with st.expander("Privacy and processing limitations"):
+    st.write(
+        "The application processes uploaded documents in memory and does not intentionally "
+        "store manuscripts in a database. The hosting provider may have its own logging or "
+        "retention practices. Please do not upload confidential manuscripts until the "
+        "organiser has approved the hosting and privacy arrangements."
+    )
+
+TEMPLATE = Path(__file__).with_name("ITARS_Original_Template.docx")
+st.download_button(
+    "Download the official reference template",
+    data=TEMPLATE.read_bytes(),
+    file_name="ITARS_6_Reference_Template.docx",
+    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+)
+
+uploaded = st.file_uploader(
+    "Upload your manuscript (Microsoft Word)",
+    type=["docx"],
+    help="Microsoft Word (.docx) only; maximum 20 MB.",
+)
+
+# Ensure a previous author's output is not displayed after a different manuscript is uploaded.
+file_id = (uploaded.name, uploaded.size, uploaded.file_id) if uploaded else None
+if st.session_state.get("last_file_id") != file_id:
+    st.session_state.pop("formatted", None)
+    st.session_state.pop("report", None)
+    st.session_state["last_file_id"] = file_id
+
+if uploaded and st.button("Format Manuscript", type="primary"):
+    try:
+        output, report = format_document(uploaded.getvalue(), label="ITARS 6.0", year="2027")
+        st.session_state["formatted"] = output
+        st.session_state["report"] = report
+        st.success("Basic formatting completed. Please review the compliance report before submitting your paper.")
+    except Exception as exc:
+        st.error(f"Unable to process this document: {exc}")
+
+if "formatted" in st.session_state:
+    st.download_button(
+        "⬇️ Download Formatted Word Document",
+        data=st.session_state["formatted"],
+        file_name="ITARS6_Formatted_Paper.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    st.subheader("Formatting and Compliance Report")
+    report = st.session_state["report"]
+    for item in report["checks"]:
+        status = item["status"]
+        st.write(("✅" if status == "Pass" else "⚠️") + f" **{item['check']}** — {status}")
+        st.caption(item["details"])
+    lines = [
+        "ITARS 6.0 — FORMATTING AND COMPLIANCE REPORT",
+        "Note: Automated checks are limited and do not indicate acceptance of the paper.",
+        "",
+    ]
+    lines.extend(f"{item['status']} | {item['check']} | {item['details']}" for item in report["checks"])
+    st.download_button(
+        "⬇️ Download Compliance Report (TXT)",
+        data="\n".join(lines).encode("utf-8"),
+        file_name="ITARS6_Compliance_Report.txt",
+        mime="text/plain",
+    )
+
 st.divider()
-st.caption('Aplikasi pemformatan berasingan daripada portal submission; muat turun dan semak Word sebelum penghantaran rasmi.')
+st.caption(
+    "This formatting tool is separate from the official paper submission portal. "
+    "Download and carefully review your Word document before submission."
+)
