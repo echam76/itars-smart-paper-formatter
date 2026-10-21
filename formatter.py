@@ -1,4 +1,4 @@
-"""ITARS 6.0 V4 formatter. Mutates source DOCX in-place to preserve embedded objects.
+"""ITARS 6.0 V5 formatter. Mutates source DOCX in-place to preserve embedded objects.
 The official Word reference template supplies layout and paragraph formatting exemplars.
 This software does not claim to validate the academic accuracy of a paper.
 """
@@ -9,8 +9,9 @@ from copy import deepcopy
 from pathlib import Path
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 TEMPLATE_PATH = Path(__file__).with_name('ITARS_6_Reference_Template.docx')
 CORE = ('Introduction','Literature Review','Methodology','Discussion of Analysis and Findings','Conclusion and Future Research','References')
@@ -94,10 +95,25 @@ def apply_format(p,example,kind):
         target.insert(0,new_props)
     if kind == 'body':
         p.alignment=WD_ALIGN_PARAGRAPH.JUSTIFY
+        # In this official template, the body exemplar has BOTH 18pt left
+        # indentation and 18pt first-line indentation. Preserve that geometry,
+        # but remove *additional* author-inserted leading tab characters.
+        for run in p.runs:
+            if not run.text: continue
+            if not run.text.strip() and '\t' not in run.text: continue
+            if run.text.startswith('\t'):
+                run.text=run.text.lstrip('\t')
+            # Only initial runs may have leading tabs. Preserve internal tabs.
+            if run.text.strip(): break
     if kind=='reference':
         # APA hanging indent; this is a layout aid, not a claim of APA validity.
-        p.paragraph_format.left_indent=Pt(18)
-        p.paragraph_format.first_line_indent=Pt(-18)
+        p.paragraph_format.left_indent=Inches(0.5)
+        p.paragraph_format.first_line_indent=Inches(-0.5)
+        p.alignment=WD_ALIGN_PARAGRAPH.LEFT
+    if kind == 'caption':
+        p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.left_indent=Pt(0)
+        p.paragraph_format.first_line_indent=Pt(0)
     if kind in ('heading','subheading'):
         p.paragraph_format.keep_with_next=True
     size=point_size(example)
@@ -172,5 +188,5 @@ def analyze(doc,classes=None,a=None,k=None):
     add('APA 7th edition references','Review required','Bibliographic accuracy, DOI validity, in-text matching and styling require author review.')
     add('Figures and equations','Review required',f'{figure_caps} figure caption(s). Verify picture positioning, equation integrity and numbering.')
     add('Special characters in title and abstract','Review required','Author must check symbols, formulae and special punctuation.')
-    add('Template-derived paragraph formatting','Review required','Word paragraph examples applied. Verify layout in Microsoft Word, especially complex objects and list numbering.')
+    add('Template-derived paragraph formatting','Review required','Template exemplars applied; extraneous leading body tabs removed; figure captions centred. Verify Word layout and numbering manually.')
     return {'checks':checks,'abstract_words':words,'keyword_count':len(keywords),'tables':len(doc.tables),'figure_captions':figure_caps,'sections':sections}
